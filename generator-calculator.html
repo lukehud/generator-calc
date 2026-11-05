@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generator Load Calculator</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--text:#1b1f24;--muted:#5f6b7a;--border:#d9dee5;--accent:#2563eb;--ok:#15803d;--warn:#b45309;--danger:#b91c1c;--input:#fff}
+@media (prefers-color-scheme: dark){:root{--bg:#121417;--card:#1c2026;--text:#e6e9ee;--muted:#9aa5b4;--border:#323843;--accent:#60a5fa;--ok:#4ade80;--warn:#fbbf24;--danger:#f87171;--input:#14171b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:14px;max-width:820px;margin:auto}
+h1{font-size:20px;margin:4px 0 2px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:12px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px}
+.h{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+input[type=number],input[type=text],select,textarea{background:var(--input);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:6px 8px;font:inherit;font-size:14px}
+input[type=number]{width:6rem;text-align:right;font-variant-numeric:tabular-nums}
+input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
+.flex{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+.row{display:grid;grid-template-columns:24px 1fr 6.4rem 6.4rem 28px;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)}
+.row .note{grid-column:2 / span 3}
+.row .note input{width:100%;font-size:12px;padding:4px 6px}
+.grp{font-weight:650;margin:12px 0 2px}
+.small{font-size:12px;color:var(--muted)}
+.bar{height:14px;border-radius:7px;background:var(--bg);border:1px solid var(--border);overflow:hidden;margin:3px 0 8px}
+.fill{height:100%;transition:width .3s}
+@media (prefers-reduced-motion: reduce){.fill{transition:none}}
+.btn{background:var(--accent);color:var(--card);border:none;border-radius:7px;padding:8px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.btn.danger{background:transparent;color:var(--danger);border:1px solid var(--danger)}
+.x{background:none;border:none;color:var(--danger);font-size:18px;cursor:pointer}
+.todo label{display:flex;gap:10px;align-items:flex-start;padding:4px 0}
+.todo label.done span{color:var(--muted);text-decoration:line-through}
+.verdict{font-weight:650;margin-top:4px}
+textarea{width:100%;min-height:150px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+@media (max-width:520px){.row{grid-template-columns:24px 1fr 5.2rem 5.2rem 24px}input[type=number]{width:5.2rem}}
+</style>
+</head>
+<body>
+<h1>⚡ Generator Load Calculator</h1>
+<div class="sub">Residential, ~1800 sq ft. Your entries save automatically in this browser. <span id="saved"></span></div>
+
+<div class="card">
+  <div class="flex">
+    <div><div class="h">Generator running W</div><input type="number" id="genRun"></div>
+    <div><div class="h">Generator starting W</div><input type="number" id="genStart"></div>
+  </div>
+  <div class="flex" style="margin-top:10px">
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="soft"> Heat pump has soft-start / is inverter</label>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="collide"> Worst case: 2 motors start together</label>
+  </div>
+  <div style="margin-top:12px">
+    <div style="display:flex;justify-content:space-between"><span>Running load: <b id="runTot"></b></span><span class="small" id="runPct"></span></div>
+    <div class="bar"><div class="fill" id="runBar"></div></div>
+    <div style="display:flex;justify-content:space-between"><span>Peak at startup: <b id="peakTot"></b></span><span class="small" id="peakPct"></span></div>
+    <div class="bar"><div class="fill" id="peakBar"></div></div>
+    <div class="verdict" id="verdict"></div>
+    <div class="small" id="v240"></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row" style="border-bottom:2px solid var(--border)"><span></span><span class="h">Load</span><span class="h" style="text-align:right">Running W</span><span class="h" style="text-align:right">Starting W</span><span></span></div>
+  <div id="rows"></div>
+  <div style="margin-top:10px"><button class="btn ghost" id="addLoad" type="button">+ Add a load</button></div>
+  <div class="small" style="margin-top:8px">Defaults are typical mid-range estimates. Replace with nameplate numbers, and use the note line for where each number came from.</div>
+</div>
+
+<div class="card">
+  <div class="grp" style="margin-top:0">Nameplate → watts converter</div>
+  <div class="flex">
+    <div><div class="h">Volts</div><input type="number" id="cV" value="240"></div>
+    <div><div class="h">RLA / FLA</div><input type="number" id="cR" placeholder="amps"></div>
+    <div><div class="h">LRA</div><input type="number" id="cL" placeholder="amps"></div>
+    <div><div class="h">Apply to</div><select id="cT"></select></div>
+    <button class="btn" id="cGo" type="button">Apply</button>
+  </div>
+  <div class="small" id="cOut" style="margin-top:8px">Running ≈ V × RLA · Starting ≈ V × LRA (conservative). Applying also stamps the note.</div>
+</div>
+
+<div class="card todo">
+  <div class="grp" style="margin-top:0">✅ Check before buying the 6300W</div>
+  <div id="todo1"></div>
+  <div class="grp">🏠 Data to grab when you're home</div>
+  <div id="todo2"></div>
+</div>
+
+<div class="card">
+  <div class="grp" style="margin-top:0">💬 Pick up where you left off with KC</div>
+  <div class="small">Tap Export, then paste the text into a new chat. It carries every number, note and checkmark, so KC can pick up without any prior context.</div>
+  <div class="flex" style="margin:10px 0">
+    <button class="btn" id="exp" type="button">Export summary</button>
+    <button class="btn ghost" id="imp" type="button">Import from text</button>
+    <button class="btn danger" id="rst" type="button">Reset to defaults</button>
+  </div>
+  <textarea id="io" placeholder="Export text appears here. To move to another device, paste an export here and tap Import."></textarea>
+  <div class="small" id="ioMsg"></div>
+</div>
+
+<script>
+(function(){
+const KEY='genCalc.v1';
+const TODOS1=[
+ ['rating','Confirm the 6300W is the RUNNING rating, not surge. Find both numbers.'],
+ ['v240','Confirm a 240V twist-lock outlet (L14-30 or L14-50). Well pump and heat pump need 240V.'],
+ ['transfer','Price a transfer switch or panel interlock, installed by an electrician. No backfeeding.'],
+ ['fuel','Pick fuel (gas / propane / dual-fuel). Propane cuts output ~10%. Check runtime per tank or fill.']];
+const TODOS2=[
+ ['well','Well pump: HP and voltage (control box / pressure-switch area)'],
+ ['hp','Heat pump outdoor nameplate: tonnage, RLA, LRA, variable-speed / inverter?'],
+ ['ah','Air handler label: heat strip kW, blower amps; confirm strips are on their own breaker'],
+ ['gas','Fuel type (gas or electric): range, dryer, water heater'],
+ ['fridge','Optional: fridge / freezer nameplate amps']];
+const DEFAULTS=()=>({gen:{run:6300,start:7800,soft:false,collide:false},
+ loads:[
+ {id:'well',g:'Core',n:'Well pump (~1 HP)',v:240,run:1200,start:4300,on:true,note:'estimate'},
+ {id:'hp',g:'Core',n:'Heat pump compressor + outdoor fan (~3 ton)',v:240,run:3500,start:11000,on:true,hp:true,note:'estimate'},
+ {id:'blower',g:'Core',n:'Air handler blower',v:240,run:600,start:1000,on:true,note:'estimate'},
+ {id:'lights',g:'Core',n:'Lights + chargers',v:120,run:400,start:400,on:true,note:'estimate'},
+ {id:'fridge',g:'Options',n:'Refrigerator',v:120,run:200,start:1200,on:false,note:'estimate'},
+ {id:'freezer',g:'Options',n:'Freezer',v:120,run:150,start:1000,on:false,note:'estimate'},
+ {id:'range',g:'Options',n:'Electric range (oven + 1 burner)',v:240,run:4500,start:4500,on:false,note:'estimate; ~500W if gas'},
+ {id:'washer',g:'Options',n:'Washer',v:120,run:800,start:1500,on:false,note:'estimate'},
+ {id:'dryer',g:'Options',n:'Electric dryer',v:240,run:5500,start:5500,on:false,note:'estimate; ~700W if gas'},
+ {id:'wh',g:'Options',n:'Electric water heater (tank)',v:240,run:4500,start:4500,on:false,note:'estimate'},
+ {id:'conv',g:'Options',n:'Wi-Fi, TV, misc.',v:120,run:300,start:300,on:false,note:'estimate'},
+ {id:'strips',g:'Keep off',n:'Emergency heat strips (separate circuit)',v:240,run:7500,start:7500,on:false,note:'estimate'}],
+ todos:{},updated:null});
+let S;
+try{S=JSON.parse(localStorage.getItem(KEY))||DEFAULTS();}catch(e){S=DEFAULTS();}
+const $=id=>document.getElementById(id);
+const fmt=n=>Math.round(n).toLocaleString()+' W';
+function save(){S.updated=new Date().toISOString();try{localStorage.setItem(KEY,JSON.stringify(S));$('saved').textContent='Saved '+new Date(S.updated).toLocaleString()+'.';}catch(e){$('saved').textContent='(Browser storage unavailable here; use Export to keep your progress.)';}}
+function el(tag,props,kids){const e=document.createElement(tag);Object.assign(e,props||{});(kids||[]).forEach(k=>e.append(k));return e;}
+
+function renderLoads(){
+  const rows=$('rows');rows.textContent='';let last='';
+  S.loads.forEach((l,i)=>{
+    if(l.g!==last){rows.append(el('div',{className:'grp',textContent:l.g}));last=l.g;}
+    const r=el('div',{className:'row'});
+    const cb=el('input',{type:'checkbox',checked:!!l.on});cb.oninput=()=>{l.on=cb.checked;upd();};
+    let nameEl;
+    if(l.g==='Custom'){nameEl=el('input',{type:'text',value:l.n});nameEl.oninput=()=>{l.n=nameEl.value;upd(true);};}
+    else{nameEl=el('div',{},[el('div',{textContent:l.n})]);}
+    const vSel=el('select',{});[120,240].forEach(v=>vSel.append(el('option',{value:v,textContent:v+'V',selected:l.v===v})));
+    vSel.style.fontSize='12px';vSel.style.padding='2px 4px';vSel.oninput=()=>{l.v=+vSel.value;upd();};
+    const nameWrap=el('div',{},[nameEl,vSel]);
+    const ri=el('input',{type:'number',value:l.run});ri.oninput=()=>{l.run=+ri.value||0;upd();};
+    const si=el('input',{type:'number',value:l.start});si.oninput=()=>{l.start=+si.value||0;upd();};
+    const x=el('button',{className:'x',type:'button',textContent:l.g==='Custom'?'×':'',title:'Remove'});
+    if(l.g==='Custom')x.onclick=()=>{S.loads.splice(i,1);upd();renderAll();};
+    const note=el('div',{className:'note'},[el('input',{type:'text',value:l.note||'',placeholder:'note: source, nameplate, breaker size...'})]);
+    note.firstChild.oninput=e=>{l.note=e.target.value;upd(true);};
+    r.append(cb,nameWrap,ri,si,x,el('span'),note);rows.append(r);
+  });
+  const sel=$('cT');sel.textContent='';S.loads.forEach(l=>sel.append(el('option',{value:l.id,textContent:l.n})));
+}
+function renderTodos(){
+  [[TODOS1,'todo1'],[TODOS2,'todo2']].forEach(([list,id])=>{
+    const box=$(id);box.textContent='';
+    list.forEach(([k,t])=>{const cb=el('input',{type:'checkbox',checked:!!S.todos[k]});
+      const lab=el('label',{className:S.todos[k]?'done':''},[cb,el('span',{textContent:t})]);
+      cb.oninput=()=>{S.todos[k]=cb.checked;lab.className=cb.checked?'done':'';save();};box.append(lab);});
+  });
+}
+function renderGen(){$('genRun').value=S.gen.run;$('genStart').value=S.gen.start;$('soft').checked=S.gen.soft;$('collide').checked=S.gen.collide;}
+['genRun','genStart'].forEach(id=>$(id).oninput=()=>{S.gen[id==='genRun'?'run':'start']=+$(id).value||0;upd();});
+$('soft').oninput=()=>{S.gen.soft=$('soft').checked;upd();};
+$('collide').oninput=()=>{S.gen.collide=$('collide').checked;upd();};
+
+function compute(){
+  let run=0,any240=false;const ex=[];
+  S.loads.forEach(l=>{if(!l.on)return;let s=l.start;if(l.hp&&S.gen.soft)s=Math.min(s,l.run*1.5);
+    run+=l.run;ex.push(Math.max(0,s-l.run));if(l.v===240)any240=true;});
+  ex.sort((a,b)=>b-a);
+  const peak=run+(ex[0]||0)+(S.gen.collide?(ex[1]||0):0);
+  const pr=run/(S.gen.run||1)*100,pp=peak/(S.gen.start||1)*100;
+  let verdict,cls;
+  if(pr<=80&&pp<=100){verdict='✅ Fits with headroom';cls='ok';}
+  else if(pr<=100&&pp<=100){verdict='⚠️ Fits, but tight (running over 80% for long periods is hard on a generator)';cls='warn';}
+  else{verdict='❌ Over capacity: '+(pr>100?'running load exceeds the rating':'a startup surge would likely trip it');cls='danger';}
+  return {run,peak,pr,pp,verdict,cls,any240};
+}
+function bar(e,p){e.style.width=Math.min(p,100)+'%';e.style.background=p<=80?'var(--ok)':p<=100?'var(--warn)':'var(--danger)';}
+function calc(){const c=compute();
+  $('runTot').textContent=fmt(c.run);$('peakTot').textContent=fmt(c.peak);
+  $('runPct').textContent=Math.round(c.pr)+'% of running rating';$('peakPct').textContent=Math.round(c.pp)+'% of starting rating';
+  bar($('runBar'),c.pr);bar($('peakBar'),c.pp);
+  $('verdict').textContent=c.verdict;$('verdict').style.color='var(--'+c.cls+')';
+  $('v240').textContent=c.any240?'Selection includes 240V loads: needs a 240V outlet and a transfer switch or interlock.':'';}
+function upd(){save();calc();}
+function renderAll(){renderGen();renderLoads();renderTodos();calc();}
+
+$('addLoad').onclick=()=>{S.loads.push({id:'c'+Date.now(),g:'Custom',n:'New load',v:120,run:0,start:0,on:true,note:''});upd();renderAll();};
+$('cGo').onclick=()=>{const V=+$('cV').value||0,R=+$('cR').value||0,L=+$('cL').value||0;
+  const l=S.loads.find(x=>x.id===$('cT').value);if(!l)return;
+  if(R)l.run=Math.round(V*R);if(L)l.start=Math.round(V*L);
+  if(R||L)l.note='nameplate: '+V+'V'+(R?', RLA '+R:'')+(L?', LRA '+L:'');
+  $('cOut').textContent=l.n+' → running '+fmt(l.run)+', starting '+fmt(l.start);upd();renderLoads();};
+
+$('exp').onclick=()=>{const c=compute();const L=[];
+  L.push('Generator calculator snapshot ('+new Date().toLocaleString()+')');
+  L.push('Context: sizing a generator for an ~1800 sq ft home. A 6300W unit was recommended. Heat strips are on a separate circuit.');
+  L.push('Generator: running '+fmt(S.gen.run)+' / starting '+fmt(S.gen.start)+'; heat pump soft-start/inverter: '+(S.gen.soft?'yes':'no')+'; 2-motor worst case: '+(S.gen.collide?'on':'off'));
+  L.push('Result: running '+fmt(c.run)+' ('+Math.round(c.pr)+'%), peak '+fmt(c.peak)+' ('+Math.round(c.pp)+'%) -> '+c.verdict);
+  L.push('Loads ON:');S.loads.filter(l=>l.on).forEach(l=>L.push('  - '+l.n+' ['+l.v+'V]: run '+l.run+' / start '+l.start+(l.note?' ('+l.note+')':'')));
+  L.push('Loads OFF:');S.loads.filter(l=>!l.on).forEach(l=>L.push('  - '+l.n+' ['+l.v+'V]: run '+l.run+' / start '+l.start+(l.note?' ('+l.note+')':'')));
+  const all=TODOS1.concat(TODOS2);
+  L.push('To-dos done: '+(all.filter(t=>S.todos[t[0]]).map(t=>t[1].split(':')[0]).join('; ')||'none'));
+  L.push('To-dos open: '+(all.filter(t=>!S.todos[t[0]]).map(t=>t[1].split(':')[0]).join('; ')||'none'));
+  L.push('RAW: '+JSON.stringify(S));
+  const txt=L.join('\n');$('io').value=txt;$('io').select();
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(()=>$('ioMsg').textContent='Copied to clipboard.',()=>$('ioMsg').textContent='Select the text above and copy it.');}
+  else $('ioMsg').textContent='Select the text above and copy it.';};
+$('imp').onclick=()=>{const t=$('io').value;const m=t.match(/RAW:\s*(\{[\s\S]*\})\s*$/);
+  try{const obj=JSON.parse(m?m[1]:t);if(!obj.loads||!obj.gen)throw 0;S=obj;upd();renderAll();$('ioMsg').textContent='Imported.';}
+  catch(e){$('ioMsg').textContent='Could not read that. Paste a full export (it ends with a RAW: line).';}};
+$('rst').onclick=()=>{if(confirm('Reset all numbers, notes and checkmarks to defaults?')){S=DEFAULTS();upd();renderAll();$('io').value='';}};
+
+renderAll();if(S.updated)$('saved').textContent='Last saved '+new Date(S.updated).toLocaleString()+'.';
+})();
+</script>
+</body>
+</html>
